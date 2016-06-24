@@ -1,0 +1,133 @@
+<!--
+/**
+ * TestCoverage.page
+ *
+ * Shows the current aggregate ApexCodeCoverage results in a table that can
+ * be sorted to show impact of code coverage. Results will be most accurate
+ * after a full test run, and before deploying or compiling any classes.
+ *
+ * - Identify classes with low or no code coverage.
+ * - Identify large classes where testing would have a big impact on coverage.
+ * - Identify classes with no lines of code (dead classes/commented out).
+ * - Simulate impact to overall coverage from changes to coverage of a single file.
+ * - Doesn't depend on apex code, so can be added directly to a production org
+ *   without the need for development.
+ * - Takes advantage of being hosted in salesforce for authentication to tooling api.
+ *
+ * @author Logan Moore
+ * @date June 2016
+ */
+-->
+<apex:page showHeader="true" sidebar="true">
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js"></script>
+<script>
+var testVisualApp = angular.module('testVisualApp', []);
+
+testVisualApp.controller('TestResultsController', function TestResultsController($scope, $http) {
+  $scope.aggregateResults = [];
+  $scope.sortName = 'ApexClassOrTrigger.Name';
+  $scope.sortReverse = false;
+
+  $scope.aggregateCoveragePercent = function() {
+    var totalLines = 0;
+    var coveredLines = 0;
+    angular.forEach($scope.aggregateResults, function(aggRes) {
+      totalLines += parseInt(aggRes.total);
+      coveredLines += parseInt(aggRes.covered);
+    });
+    return coveredLines / totalLines;
+  }
+
+  $http.get('/services/data/v37.0/tooling/query?q=SELECT+ApexClassOrTriggerId,+ApexClassOrTrigger.Name,+ApexClassOrTrigger.Type,+NumLinesCovered,+NumLinesUncovered+FROM+ApexCodeCoverage',
+    {
+      headers: {
+        'Content-type': 'application/json',
+        'Authorization': 'Bearer {!$Api.Session_ID}'
+      }
+    })
+    .then(function(response) {
+      angular.forEach(response.data.records, function(record) {
+      
+      // Skip test files that falsely impact test %
+      var problemClasses = ['TestObjectFactory'];
+      if (problemClasses.indexOf(record.ApexClassOrTrigger.Name) >= 0) return;
+
+      var totalLines = record.NumLinesCovered + record.NumLinesUncovered;
+      $scope.aggregateResults.push({
+        id: record.ApexClassOrTriggerId,
+        name: record.ApexClassOrTrigger.Name + extensionOfType(record.ApexClassOrTrigger.Type),
+        type: nameOfType(record.ApexClassOrTrigger.Type),
+        total: totalLines,
+        covered: record.NumLinesCovered,
+        uncovered: record.NumLinesUncovered,
+        coveragePercent: function() {
+          if (this.total === 0) return 0;
+          return this.covered / this.total;
+        }
+      });
+    });
+  });
+
+  function nameOfType(type) {
+    if (type === '01p') return 'class';
+    if (type === '01q') return 'trigger';
+    return 'unknown';
+  }
+
+  function extensionOfType(type) {
+    if (type === '01p') return '.cls';
+    if (type === '01q') return '.trigger';
+    return '';
+  }
+});
+</script>
+<div ng-app="testVisualApp" ng-controller="TestResultsController">
+<h1>Coverage Percent: {{aggregateCoveragePercent() * 100 | number}}</h1>
+<table>
+  <thead>
+    <tr>
+      <th>
+        <a href="#" ng-click="sortType = 'type'; sortReverse = !sortReverse">
+          Type
+        </a>
+      </th>
+      <th>
+        <a href="#" ng-click="sortType = 'name'; sortReverse = !sortReverse">
+          Name
+        </a>
+      </th>
+      <th>
+        <a href="#" ng-click="sortType = 'total'; sortReverse = !sortReverse">
+          Total Lines
+        </a>
+      </th>
+      <th>
+        <a href="#" ng-click="sortType = 'covered'; sortReverse = !sortReverse">
+          Lines Covered
+        </a>
+      </th>
+      <th>
+        <a href="#" ng-click="sortType = 'uncovered'; sortReverse = !sortReverse">
+          Lines Uncovered
+        </a>
+      </th>
+      <th>
+        <a href="#" ng-click="sortType = 'coveragePercent()'; sortReverse = !sortReverse">
+          Coverage%
+        </a>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr ng-repeat="aggRes in aggregateResults | orderBy:sortType:sortReverse">
+      <td>{{aggRes.type}}</td>
+      <td>{{aggRes.name}}</td>
+      <td>{{aggRes.total}}</td>
+      <td><input ng-model="aggRes.covered" ng-change="aggRes.uncovered = aggRes.total - aggRes.covered; calculateAggregateCoverage();"/></td>
+      <td>{{aggRes.uncovered}}</td>
+      <td>{{aggRes.coveragePercent() * 100 | number}}%</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</apex:page>
