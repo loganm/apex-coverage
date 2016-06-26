@@ -38,7 +38,7 @@ testVisualApp.controller('TestResultsController', function TestResultsController
     return coveredLines / totalLines;
   }
 
-  $http.get('/services/data/v37.0/tooling/query?q=SELECT+ApexClassOrTriggerId,+ApexClassOrTrigger.Name,+ApexClassOrTrigger.Type,+NumLinesCovered,+NumLinesUncovered+FROM+ApexCodeCoverage',
+  $http.get('/services/data/v37.0/tooling/query?q=SELECT+ApexClassOrTriggerId,+ApexClassOrTrigger.Name,+ApexClassOrTrigger.Type,+NumLinesCovered,+NumLinesUncovered+FROM+ApexCodeCoverageAggregate',
     {
       headers: {
         'Content-type': 'application/json',
